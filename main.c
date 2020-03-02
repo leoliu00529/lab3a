@@ -16,6 +16,12 @@ int inode_size;
 int block_per_group;
 int inode_per_group;
 
+int group_number = 0;
+int num_of_free_block;
+int num_of_free_inode;
+int block_bitmap;
+int inode_bitmap;
+int first_block;
 
 void sysError(char * message) {
     fprintf(stderr, "%s\n", message);
@@ -29,7 +35,7 @@ void superBlock() {
     fseek(imfd, 1024, SEEK_SET);
 
     // read 1024 bytes
-    if (fread(&ext2superblock, 1024, 1024, imfd) < 0) {
+    if (fread(&ext2superblock, 1024, 1, imfd) < 0) {
         sysError("Failed to read superblock.");
     }
 
@@ -39,10 +45,27 @@ void superBlock() {
     inode_size = ext2superblock.s_inode_size;
     block_per_group = ext2superblock.s_blocks_per_group;
     inode_per_group = ext2superblock.s_inodes_per_group;
-    
+    first_block = ext2superblock.s_first_ino;
+
     printf("SUPERBLOCK,%d,%d,%d,%d,%d,%d,%d\n", total_block, total_inode, block_size, inode_size, block_per_group, inode_per_group, ext2superblock.s_first_ino);
 
     return;
+}
+
+void group_desc()
+{
+  struct ext2_group_desc group;
+  if(fread(&group, 1024, 1, imfd) < 0){
+    sysError("Failed to read group descriptor.");
+  }
+
+  num_of_free_block = group.bg_free_blocks_count;
+  num_of_free_inode = group.bg_free_inodes_count;
+  block_bitmap = group.bg_block_bitmap;
+  inode_bitmap = group.bg_inode_bitmap;
+  
+  printf("GROUP,%d,%d,%d,%d,%d,%d,%d,%d\n", group_number, total_block, total_inode, num_of_free_block, num_of_free_inode, block_bitmap, inode_bitmap, first_block);
+
 }
 
 
@@ -62,5 +85,9 @@ int main(int argc, const char * argv[]) {
     }
     
     superBlock();
-    return 0;
+    group_desc();
+    fclose(imfd);
+    fclose(outfd);
+    
+    exit(0);
 }
