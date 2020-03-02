@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <fcntl.h>
 #include <ctype.h>
 #include "ext2.h"
@@ -135,6 +136,47 @@ void iFree()
   return;
 }
 
+void i_summary() {
+    struct ext2_inode ext2inode;
+    fseek(imfd, (inode_bitmap + 1) * block_size, SEEK_SET);
+    int i = 0;
+    for (; i < inode_per_group; i ++) {
+        fread(&ext2inode, 128, 1, imfd);
+        char inode_type;
+        if (ext2inode.i_mode != 0  && ext2inode.i_links_count != 0) {
+            fprintf(imfd, "%d", ext2inode.i_mode);
+            if (ext2inode.i_mode == 0xA000) {
+                inode_type = 's';
+            }
+            else if (ext2inode.i_mode == 0x8000) {
+                inode_type = 'f';
+            }
+            else if (ext2inode.i_mode == 0x4000) {
+                inode_type = 'd';
+            }
+            else {
+                inode_type = '?';
+            }
+            time_t atime = ext2inode.i_atime;
+            time_t mtime = ext2inode.i_mtime;
+            time_t ctime = ext2inode.i_ctime;
+            fprintf(outfd, "INODE,%d,%c,%o,%d,%d,%d,%s,%s,%s,%d,%d", i, inode_type, ext2inode.i_mode & 0XFFF, ext2inode.i_uid, ext2inode.i_gid, ext2inode.i_links_count, asctime(localtime(&ctime)), asctime(localtime(&mtime)), asctime(localtime(&atime)), ext2inode.i_size, ext2inode.i_blocks);
+            
+            if (inode_type == 's' && ext2inode.i_blocks == 0) {
+                fprintf(outfd, "\n");
+            }
+            else if (inode_type == 'f' || inode_type == 'd' || inode_type == 's') {
+                fprintf(outfd, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n", ext2inode.i_block[0], ext2inode.i_block[1], ext2inode.i_block[2], ext2inode.i_block[3], ext2inode.i_block[4], ext2inode.i_block[5], ext2inode.i_block[6], ext2inode.i_block[7], ext2inode.i_block[8], ext2inode.i_block[9], ext2inode.i_block[10], ext2inode.i_block[11], ext2inode.i_block[12], ext2inode.i_block[13], ext2inode.i_block[14]);
+            }
+            else {
+                fprintf(outfd, "\n");
+            }
+        }
+    }
+
+    return;
+}
+
 
 int main(int argc, const char * argv[]) {
     if (argc != 2) {
@@ -159,9 +201,10 @@ int main(int argc, const char * argv[]) {
     group_desc();
     bFree();
     iFree();
-
+    i_summary();
+    
     fclose(imfd);
     fclose(outfd);
-    
+   
     exit(0);
 }
