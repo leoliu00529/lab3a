@@ -23,9 +23,11 @@ int block_bitmap;
 int inode_bitmap;
 int first_block;
 
+int inode_table;
+
 void sysError(char * message) {
     fprintf(stderr, "%s\n", message);
-    exit(1);
+    exit(2);
 }
 
 void superBlock() {
@@ -55,7 +57,7 @@ void superBlock() {
 void group_desc()
 {
   struct ext2_group_desc group;
-  if(fread(&group, 1024, 1, imfd) < 0){
+  if(fread(&group, 32, 1, imfd) < 0){
     sysError("Failed to read group descriptor.");
   }
 
@@ -63,18 +65,29 @@ void group_desc()
   num_of_free_inode = group.bg_free_inodes_count;
   block_bitmap = group.bg_block_bitmap;
   inode_bitmap = group.bg_inode_bitmap;
-  
+  inode_table = group.bg_inode_table;
+
   printf("GROUP,%d,%d,%d,%d,%d,%d,%d,%d\n", group_number, total_block, total_inode, num_of_free_block, num_of_free_inode, block_bitmap, inode_bitmap, first_block);
+
+  return;
+}
+
+void block()
+{
+  fseek(imfd, inode_table + 128 * inode_per_group, SEEK_SET);
+  
+
 
 }
 
 
 int main(int argc, const char * argv[]) {
-//    if (argc != 2) {
-//        sysError("Invalid argument(s).");
-//    }
+    if (argc != 2) {
+      fprintf(stderr,"Invalid argument(s).");
+      exit(1);
+    }
     
-    imfd = fopen("EXT2_test.img", "r");
+    imfd = fopen(argv[1], "r");
     if (imfd == NULL) {
         sysError("Failed to open the image file.");
     }
@@ -86,6 +99,7 @@ int main(int argc, const char * argv[]) {
     
     superBlock();
     group_desc();
+
     fclose(imfd);
     fclose(outfd);
     
