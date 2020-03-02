@@ -1,5 +1,5 @@
 TARBALL= lab3a-605142505.tar.gz
-CFLAG= -Wall -Wextra
+CFLAG= -Wall -Wextra -g
 
 default:	
 	gcc $(CFLAG) -o lab3a lab3a.c

@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include "ext2.h"
 
 FILE * imfd;
@@ -37,7 +38,8 @@ void superBlock() {
     fseek(imfd, 1024, SEEK_SET);
 
     // read 1024 bytes
-    if (fread(&ext2superblock, 1024, 1, imfd) < 0) {
+    fread(&ext2superblock, 1024, 1, imfd);
+    if(ferror(imfd)){
         sysError("Failed to read superblock.");
     }
 
@@ -49,7 +51,7 @@ void superBlock() {
     inode_per_group = ext2superblock.s_inodes_per_group;
     first_block = ext2superblock.s_first_ino;
 
-    printf("SUPERBLOCK,%d,%d,%d,%d,%d,%d,%d\n", total_block, total_inode, block_size, inode_size, block_per_group, inode_per_group, ext2superblock.s_first_ino);
+    fprintf(outfd, "SUPERBLOCK,%d,%d,%d,%d,%d,%d,%d\n", total_block, total_inode, block_size, inode_size, block_per_group, inode_per_group, ext2superblock.s_first_ino);
 
     return;
 }
@@ -57,7 +59,8 @@ void superBlock() {
 void group_desc()
 {
   struct ext2_group_desc group;
-  if(fread(&group, 32, 1, imfd) < 0){
+  fread(&group, 32, 1, imfd);
+  if(ferror(imfd)){
     sysError("Failed to read group descriptor.");
   }
 
@@ -67,17 +70,69 @@ void group_desc()
   inode_bitmap = group.bg_inode_bitmap;
   inode_table = group.bg_inode_table;
 
-  printf("GROUP,%d,%d,%d,%d,%d,%d,%d,%d\n", group_number, total_block, total_inode, num_of_free_block, num_of_free_inode, block_bitmap, inode_bitmap, first_block);
+  fprintf(outfd, "GROUP,%d,%d,%d,%d,%d,%d,%d,%d\n", group_number, total_block, total_inode, num_of_free_block, num_of_free_inode, block_bitmap, inode_bitmap, first_block);
 
   return;
 }
 
-void block()
+void bFree()
 {
-  fseek(imfd, inode_table + 128 * inode_per_group, SEEK_SET);
-  
+  fseek(imfd, block_bitmap * block_size, SEEK_SET);
+  char* bitmap = (char*)malloc(sizeof(char) * block_size);
+  if(bitmap == NULL)
+    {
+      sysError("Failed to allocate memory.");
+    }
+  fread(bitmap, 1, block_size, imfd);
+  if(ferror(imfd)){
+    sysError("Failed to read block bitmap.");
+  }
+  int i, j;
+  char temp;
+  int count = 1;
+  for(i = 0; i < block_size; i++)
+    {
+      temp = bitmap[i] & 0xFF;
+      for(j = 0; j < 8; j++)
+	{
+	  if(!((temp >> j) & 0x1))
+	    {
+	      fprintf(outfd, "BFREE, %d\n", count);
+	    }
+	  count++;
+	}
+    }
+  return;
+}
 
-
+void iFree()
+{
+  fseek(imfd, inode_bitmap * block_size, SEEK_SET);
+  char* bitmap = (char*)malloc(sizeof(char) * block_size);
+  if(bitmap == NULL)
+    {
+      sysError("Failed to allocate memory.");
+    }
+  fread(bitmap, 1, block_size, imfd);
+  if(ferror(imfd)){
+    sysError("Failed to read inode bitmap.");
+  }
+  int i, j;
+  char temp;
+  int count = 1;
+  for(i = 0; i < block_size; i++)
+    {
+      temp = bitmap[i] & 0xFF;
+      for(j = 0; j < 8; j++)
+        {
+          if(!((temp >> j) & 0x1))
+            {
+              fprintf(outfd, "IFREE, %d\n", count);
+            }
+          count++;
+        }
+    }
+  return;
 }
 
 
@@ -93,12 +148,17 @@ int main(int argc, const char * argv[]) {
     }
     
     outfd = fopen("output.csv", "w+");
+    //
+    outfd = stdout;
+    //
     if (outfd == NULL) {
         sysError("Failed to create output csv file.");
     }
     
     superBlock();
     group_desc();
+    bFree();
+    iFree();
 
     fclose(imfd);
     fclose(outfd);
